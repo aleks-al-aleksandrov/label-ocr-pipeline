@@ -1,4 +1,7 @@
-# Label OCR Pipeline — case study
+# Label OCR Pipeline
+
+[![tests](https://github.com/aleks-al-aleksandrov/label-ocr-pipeline/actions/workflows/tests.yml/badge.svg)](https://github.com/aleks-al-aleksandrov/label-ocr-pipeline/actions/workflows/tests.yml)
+![Python](https://img.shields.io/badge/python-3.10%20%7C%203.12-3776AB?logo=python&logoColor=white)
 
 **Computer vision + OCR pipeline that turns photos of retail shelf labels into clean, validated product data.**
 Built on my own as a Student Assistant in Commercial Analytics at Salling Group (2025).
@@ -11,7 +14,7 @@ Built on my own as a Student Assistant in Commercial Analytics at Salling Group 
 | **Stack** | Python · OpenCV · YOLO · EasyOCR · Tesseract · PyTorch · pandas · Azure ML Studio · Power BI |
 
 > [!IMPORTANT]
-> **Why there is no code here.** The pipeline was built during my employment and the code, model and data belong to Salling Group. Out of respect for that, this repository only describes the problem, the design and what I learned. The label image below is fictional, and the code snippets are short re-implementations of public standards (like EAN-13) written for this page. I'm happy to walk through the full design in an interview.
+> **About the code in this repository.** The production pipeline was built during my employment, and its code, model and data belong to Salling Group. Out of respect for that, this repository documents the problem, the architecture and what I learned, together with **clean, tested re-implementations of the validation logic** in [`label_ocr/`](label_ocr/validation.py). The label image is fictional. I'm happy to walk through the full design in an interview.
 
 ![What the pipeline sees on a shelf label](assets/label-anatomy.png)
 
@@ -51,43 +54,29 @@ Two tools support the pipeline:
 - **Label cropper** — a desktop tool for drawing regions on difficult photos, which applies the same enhancement chain and saves standardised crops. Used for edge cases and for building labelled training data.
 - **Batch extractor** — a desktop app that processes a folder in a background thread, shows progress and results per image, and exports the dataset.
 
-## Two pieces of the logic
+## Validation logic (tested)
 
-Validation is where most of the accuracy came from. Short re-implementations of the core ideas:
+Validation is where most of the accuracy came from: OCR output is never trusted until it passes these checks. The re-implementations in [`label_ocr/validation.py`](label_ocr/validation.py) are covered by [22 tests](tests/test_validation.py) that run on every push.
 
 ```python
-import re
-
-OCR_DIGIT_FIXES = str.maketrans({"O": "0", "o": "0", "D": "0", "I": "1", "l": "1", "S": "5", "B": "8"})
-
 def is_valid_ean13(code: str) -> bool:
-    """EAN-13: weights 1,3,1,3... over the first 12 digits; the 13th is the check digit."""
+    """Check an EAN-13 code: weights 1,3,1,3... over the first 12 digits, the 13th is the check digit."""
     if len(code) != 13 or not code.isdigit():
         return False
-    total = sum(int(d) * (3 if i % 2 else 1) for i, d in enumerate(code[:12]))
+    total = sum(int(digit) * (3 if i % 2 else 1) for i, digit in enumerate(code[:12]))
     return (10 - total % 10) % 10 == int(code[12])
-
-def find_ean(text: str):
-    """Fix common OCR confusions, then return the first 13-digit run with a valid checksum."""
-    digits = re.sub(r"\D", "", text.translate(OCR_DIGIT_FIXES))
-    for start in range(len(digits) - 12):
-        candidate = digits[start:start + 13]
-        if is_valid_ean13(candidate):
-            return candidate
-    return None
 ```
 
-```python
-PRICE = re.compile(r"(\d{1,4})\s*[,.]\s*(\d{2}|-)")
+| Function | What it handles |
+|---|---|
+| `fix_ocr_digits` | Letters OCR reads instead of digits: `O→0`, `I→1`, `S→5`, `B→8` |
+| `is_valid_ean13` | EAN-13 checksum — catches most misreads of long numbers |
+| `find_ean` | Prefers a standalone valid 13-digit number; rejoins groups OCR split with spaces; never glues two separate numbers into a false match |
+| `parse_price` | Danish shelf formats (`24,95`, `24,-`) and rejects implausible prices |
 
-def parse_price(text: str, low: float = 1, high: float = 5000):
-    """'24,95' -> 24.95, '24,-' -> 24.0; rejects values outside a plausible shelf-price range."""
-    match = PRICE.search(text.translate(OCR_DIGIT_FIXES))
-    if not match:
-        return None
-    kroner, ore = match.groups()
-    price = float(kroner) + (0 if ore == "-" else int(ore) / 100)
-    return price if low <= price <= high else None
+```bash
+pip install pytest
+pytest -v
 ```
 
 ## What I learned
