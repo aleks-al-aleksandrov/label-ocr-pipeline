@@ -1,4 +1,4 @@
-# Label OCR Pipeline — case study
+# Label OCR Pipeline 
 
 **Computer vision + OCR pipeline that turns photos of retail shelf labels into clean, validated product data.**
 Built on my own as a Student Assistant in Commercial Analytics at Salling Group (2025).
