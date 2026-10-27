@@ -1,0 +1,12 @@
+[project]
+name = "label-ocr"
+version = "0.1.0"
+description = "Reference implementations of the validation logic from the label OCR pipeline"
+requires-python = ">=3.10"
+
+[project.optional-dependencies]
+dev = ["pytest>=8"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
